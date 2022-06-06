@@ -9,6 +9,8 @@ import sqlite3
 from config import DB_FILENAME, TOKEN
 from storage import storage
 import keyboard
+import texts
+
 
 bot = Bot(token=TOKEN)
 storage_for_form = MemoryStorage()
@@ -27,12 +29,13 @@ class FSMForm2(StatesGroup):
 class FSMForm3(StatesGroup):
     key = State()
 
-
+#Вычисление результатов
 def get_result(user):
     count_res = len(storage[user]["results"])
     border_percent = 100 / count_res
     new_max = storage[user]["max"] - storage[user]["min"]
-    if new_max == 0: new_max = storage[user]["max"]
+    if len(storage[user]["question_text"]) == 1:
+        return storage[user]["results"][-1]
     new_pressed = storage[user]["pressed"] - storage[user]["min"]
     new_pressed_percent = (new_pressed / new_max) * 100
     i = 0
@@ -46,8 +49,8 @@ def get_result(user):
 @dp.message_handler(commands=['start'])
 async def process_start_command(message: types.Message):
     print(f"User {message.from_user.username} starts bot")
-    str1 = "Вы можете пройти тест или создать свой"
-    await bot.send_message(message.from_user.id, str1, reply_markup=keyboard.start_keyboard)
+    str1 = texts.WELCOME_TEXT
+    await bot.send_message(message.from_user.id, str1, parse_mode=types.ParseMode.HTML, reply_markup=keyboard.start_keyboard)
     str1 = "Что вы хотите сделать?"
     await bot.send_message(message.from_user.id, str1, reply_markup=keyboard.start_keyboard)
 
@@ -55,6 +58,9 @@ async def process_start_command(message: types.Message):
 @dp.message_handler(commands=["Создать_тест"])
 async def create_test(message: types.Message):
     storage[f"user{message.from_user.id}"] = {"test_name" : "", "test_description" : "", "question_text" : "", "question_answers": "", "question_answers_rate": "", "results": ""} #Создание хранилище для конкретного пользователя
+    str1 = texts.CREATION_INSTRUCTION_TEXT
+    await bot.send_message(message.from_user.id, str1, parse_mode=types.ParseMode.HTML, reply_markup=keyboard.start_keyboard)
+    
     str1 = "Введите вопрос:"
     await FSMForm.question.set()
     await bot.send_message(message.from_user.id, str1, reply_markup=keyboard.ReplyKeyboardRemove())
@@ -65,7 +71,8 @@ async def create_test(message: types.Message):
     str1 = "Введите вопрос:"
     await FSMForm.question.set()
     await message.reply(str1, reply_markup=keyboard.ReplyKeyboardRemove())
-    
+
+#Команда для прохождения теста  
 @dp.message_handler(commands=["Пройти_тест"])
 async def run_test(message: types.Message):
     storage[f"user{message.from_user.id}"] = {}
@@ -73,6 +80,7 @@ async def run_test(message: types.Message):
     await FSMForm3.key.set()
     await message.reply(str1, reply_markup=keyboard.ReplyKeyboardRemove())
 
+#Считывание ключа 
 @dp.message_handler(state=FSMForm3.key)
 async def read_key(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
@@ -128,10 +136,10 @@ async def read_key(message: types.Message, state: FSMContext):
     inline_keyboard = keyboard.answer_variants(message.from_user.id, storage[f"user{message.from_user.id}"]["question_answers"][storage[f"user{message.from_user.id}"]["question_index"]])
     await bot.send_message(message.from_user.id, storage[f"user{message.from_user.id}"]["question_text"][storage[f"user{message.from_user.id}"]["question_index"]], reply_markup=inline_keyboard)
 
-
+#Синхрон результатов и цены ответов
 def processing(user, pressed_index):
-    max = -99999
-    min = 99999
+    max = -9999
+    min = 9999
     for number in storage[user]["question_answers_rate"][storage[user]["question_index"]]:
         if int(number) > max:
             max = int(number)
@@ -143,7 +151,7 @@ def processing(user, pressed_index):
     storage[user]["min"] += min
 
 
-
+#Обработка кнопок прохождения теста
 @dp.callback_query_handler(text_contains = 'udeo_')
 async def process_callback_btn(callback_query: types.CallbackQuery):
     c_data = callback_query.data.split("_") #Колбэк дата
@@ -164,16 +172,18 @@ async def process_callback_btn(callback_query: types.CallbackQuery):
 
 
 
-
-
-
 #Команда для завершения создания теста
 @dp.message_handler(commands=["Завершить_создание"])
 async def exit_test(message: types.Message):
-    str1 = "Введите результаты:"
-    await FSMForm2.results.set()
-    await message.reply(str1, reply_markup=keyboard.ReplyKeyboardRemove())
+    if storage[f"user{message.from_user.id}"]["question_text"] != "":
+        str1 = "Введите результаты:"
+        await FSMForm2.results.set()
+        await message.reply(str1, reply_markup=keyboard.ReplyKeyboardRemove())
+    else:
+        str1 = "Вы не ввели ни одного вопроса!\nВыход из создания. . ."
+        await bot.send_message(message.from_user.id, str1, reply_markup=keyboard.start_keyboard)
 
+#Ввод результатов
 @dp.message_handler(state=FSMForm2.results)
 async def add_results(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
@@ -183,6 +193,7 @@ async def add_results(message: types.Message, state: FSMContext):
     await FSMForm2.next()
     await message.reply(str1)
 
+#Ввод названия теста
 @dp.message_handler(state=FSMForm2.name)
 async def add_name(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
@@ -192,6 +203,7 @@ async def add_name(message: types.Message, state: FSMContext):
     await FSMForm2.next()
     await message.reply(str1)
 
+#Ввод описания теста
 @dp.message_handler(state=FSMForm2.description)
 async def add_description(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
@@ -223,9 +235,7 @@ async def add_description(message: types.Message, state: FSMContext):
     await bot.send_message(message.from_user.id, str1, reply_markup=keyboard.start_keyboard)
     
 
-
-
-
+#Добавление нового вопроса
 @dp.message_handler(state=FSMForm.question)
 async def add_question(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
@@ -235,6 +245,7 @@ async def add_question(message: types.Message, state: FSMContext):
     await FSMForm.next()
     await message.reply(str1)
 
+#Добавление ответов к вопросу
 @dp.message_handler(state=FSMForm.answer)
 async def add_answer(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
@@ -249,7 +260,7 @@ async def add_answer(message: types.Message, state: FSMContext):
     a_r = ""
     try:
         for item in answers:
-            if item[1][0] == "+" or item[1][0] == "-" or item[1][0] == "0":
+            if len(item[1]) < 6 and ((item[1][0] == "+" and item[1][1].isdigit() == True) or (item[1][0] == "-" and item[1][1].isdigit() == True) or item[1][0] == "0"):
                 a = a + ";" + item[0]
                 a_r = a_r + ";" + item[1]
             else:
@@ -269,10 +280,7 @@ async def add_answer(message: types.Message, state: FSMContext):
     await state.finish()
     await bot.send_message(message.from_user.id, str1, reply_markup=keyboard.add_question_keyboard)
 
-
-
-
-#Команда для создания теста
+#Команда для вывода тестов этого пользователя
 @dp.message_handler(commands=["Мои_тесты"])
 async def get_my_tests(message: types.Message):
     storage[f"user{message.from_user.id}"] = {}
@@ -298,6 +306,7 @@ async def get_my_tests(message: types.Message):
         str1 = "У вас нет созданных тестов :("
         await bot.send_message(message.from_user.id, str1, reply_markup=keyboard.start_keyboard)
 
+#Обработка кнопок в меню моих тестов
 @dp.callback_query_handler(text_contains = 'ed$')
 async def process_callback_btn2(callback_query: types.CallbackQuery):
     c_data = callback_query.data.split("$") #Колбэк дата
@@ -341,10 +350,6 @@ async def check_another_messages(message: types.Message):
         cur.execute(f'INSERT INTO users VALUES("{message.from_user.id}")')
         conn.commit()
         
-
-
-
-
 
 if __name__ == '__main__':
     executor.start_polling(dp)
