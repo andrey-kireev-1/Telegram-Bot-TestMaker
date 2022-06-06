@@ -32,7 +32,7 @@ def get_result(user):
     count_res = len(storage[user]["results"])
     border_percent = 100 / count_res
     new_max = storage[user]["max"] - storage[user]["min"]
-    new_min = 0
+    if new_max == 0: new_max = storage[user]["max"]
     new_pressed = storage[user]["pressed"] - storage[user]["min"]
     new_pressed_percent = (new_pressed / new_max) * 100
     i = 0
@@ -146,7 +146,7 @@ def processing(user, pressed_index):
 
 @dp.callback_query_handler(text_contains = 'udeo_')
 async def process_callback_btn(callback_query: types.CallbackQuery):
-    c_data = callback_query.data.split("_") #Колбэк дата = "udeo_Индекс идеологии_IDПользователя"
+    c_data = callback_query.data.split("_") #Колбэк дата
     print(c_data)
     pressed_index = c_data[2]
     user = f"user{c_data[1]}"
@@ -209,7 +209,11 @@ async def add_description(message: types.Message, state: FSMContext):
     try:
         conn = sqlite3.connect(DB_FILENAME)
         cur = conn.cursor()
-        cur.execute(f'INSERT INTO users_tests VALUES("{user_test_key}", "@{message.from_user.username}","{storage[f"user{message.from_user.id}"]["test_name"]}", "{storage[f"user{message.from_user.id}"]["test_description"]}", "{storage[f"user{message.from_user.id}"]["question_text"]}", "{storage[f"user{message.from_user.id}"]["question_answers"]}", "{storage[f"user{message.from_user.id}"]["question_answers_rate"]}", "{storage[f"user{message.from_user.id}"]["results"]}")')
+        if f"@{message.from_user.username}" != "@None":
+            cur.execute(f'INSERT INTO users_tests VALUES("{user_test_key}", "@{message.from_user.username}","{storage[f"user{message.from_user.id}"]["test_name"]}", "{storage[f"user{message.from_user.id}"]["test_description"]}", "{storage[f"user{message.from_user.id}"]["question_text"]}", "{storage[f"user{message.from_user.id}"]["question_answers"]}", "{storage[f"user{message.from_user.id}"]["question_answers_rate"]}", "{storage[f"user{message.from_user.id}"]["results"]}")')
+        else:
+            cur.execute(f'INSERT INTO users_tests VALUES("{user_test_key}", "user{message.from_user.id}","{storage[f"user{message.from_user.id}"]["test_name"]}", "{storage[f"user{message.from_user.id}"]["test_description"]}", "{storage[f"user{message.from_user.id}"]["question_text"]}", "{storage[f"user{message.from_user.id}"]["question_answers"]}", "{storage[f"user{message.from_user.id}"]["question_answers_rate"]}", "{storage[f"user{message.from_user.id}"]["results"]}")')
+
         print("execution")
         conn.commit()
         storage[f"user{message.from_user.id}"] = {}
@@ -271,17 +275,52 @@ async def add_answer(message: types.Message, state: FSMContext):
 #Команда для создания теста
 @dp.message_handler(commands=["Мои_тесты"])
 async def get_my_tests(message: types.Message):
+    storage[f"user{message.from_user.id}"] = {}
     conn = sqlite3.connect(DB_FILENAME)
     cur = conn.cursor()
-    cur.execute('SELECT * FROM users_tests WHERE owner = ?', (f"@{message.from_user.username}",))
+    if f"@{message.from_user.username}" != "@None":
+        cur.execute('SELECT * FROM users_tests WHERE owner = ?', (f"@{message.from_user.username}",))
+    else:
+        cur.execute('SELECT * FROM users_tests WHERE owner = ?', (f"user{message.from_user.id}",))
+
     print("execution")
     conn.commit()
     rows = cur.fetchall()
-    for row in rows:
-        print(row)
+    i = 0
+    if rows != []:
+        for row in rows:
+            inline_keyboard = keyboard.my_test(row[1], i)
+            print(row)
+            str1 = f"Название теста: {row[2]}\nСоздатель теста: {row[1]}\nОписание: {row[3]}"
+            await bot.send_message(message.from_user.id, str1, reply_markup=inline_keyboard)
+            i += 1
+    else:
+        str1 = "У вас нет созданных тестов :("
+        await bot.send_message(message.from_user.id, str1, reply_markup=keyboard.start_keyboard)
 
-
-
+@dp.callback_query_handler(text_contains = 'ed$')
+async def process_callback_btn2(callback_query: types.CallbackQuery):
+    c_data = callback_query.data.split("$") #Колбэк дата
+    print(c_data)
+    owner = c_data[1]
+    test_index = int(c_data[2])
+    flag = int(c_data[3])
+    
+    conn = sqlite3.connect(DB_FILENAME)
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM users_tests WHERE owner = ?', (owner,))
+    rows = cur.fetchall()
+    cur = conn.cursor()
+    if (flag == 1):
+        cur.execute(f"DELETE FROM users_tests WHERE ( owner = ? AND test_name = ? )", (owner, rows[test_index][2],))
+        await bot.send_message(callback_query.from_user.id, "Тест удален", reply_markup=keyboard.start_keyboard)
+    if (flag == 0):
+        cur.execute(f"SELECT hash FROM users_tests WHERE ( owner = ? AND test_name = ? )", (owner, rows[test_index][2],))
+        rows = cur.fetchall()
+        print(rows)
+        await bot.send_message(callback_query.from_user.id, rows[0][0], reply_markup=keyboard.start_keyboard)
+    print("execution")
+    conn.commit()
 
 @dp.message_handler() #Отлов сообщений не соответствующих командам
 async def check_another_messages(message: types.Message):
