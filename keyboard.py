@@ -4,10 +4,11 @@ from aiogram.types import ReplyKeyboardRemove, \
 
 
 button_start_test = KeyboardButton("/Пройти_тест")
+button_my_tests = KeyboardButton("/Мои_тесты")
 button_create_test = KeyboardButton("/Создать_тест")
 
 start_keyboard = ReplyKeyboardMarkup(resize_keyboard = True) #Клавиатура на старте
-start_keyboard.add(button_start_test, button_create_test)
+start_keyboard.add(button_start_test, button_my_tests, button_create_test)
 
 button_add_question = KeyboardButton("/Добавить_вопрос")
 button_exit_creation = KeyboardButton("/Завершить_создание")
@@ -30,3 +31,7 @@ def answer_variants(id, variants): #Инлайновая клавиатура в
         ideologies_inline_keyboard.add(button_ideology)
         i += 1
     return ideologies_inline_keyboard
+
+def my_test(id, variants): #Инлайновая клавиатура выбора варианта ответа
+    
+    return

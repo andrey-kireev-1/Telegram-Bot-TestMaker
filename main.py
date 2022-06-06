@@ -268,6 +268,19 @@ async def add_answer(message: types.Message, state: FSMContext):
 
 
 
+#Команда для создания теста
+@dp.message_handler(commands=["Мои_тесты"])
+async def get_my_tests(message: types.Message):
+    conn = sqlite3.connect(DB_FILENAME)
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM users_tests WHERE owner = ?', (f"@{message.from_user.username}",))
+    print("execution")
+    conn.commit()
+    rows = cur.fetchall()
+    for row in rows:
+        print(row)
+
+
 
 
 @dp.message_handler() #Отлов сообщений не соответствующих командам
@@ -289,6 +302,10 @@ async def check_another_messages(message: types.Message):
         cur.execute(f'INSERT INTO users VALUES("{message.from_user.id}")')
         conn.commit()
         
+
+
+
+
 
 if __name__ == '__main__':
     executor.start_polling(dp)
